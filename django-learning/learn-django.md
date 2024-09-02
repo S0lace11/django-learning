@@ -1,5 +1,7 @@
 # 环境配置
 
+安装 anaconda, vscode
+
 ```shell
 pip install django # 安装 django
 ```
@@ -205,8 +207,6 @@ datetime.datetime(2012, 2, 26, 13, 0, 0, 775217, tzinfo=datetime.timezone.utc)
 <QuerySet [<Question: Question object (1)>]>
 ```
 
-
-
 对 Choice 类增删改查
 
 ```shell
@@ -238,44 +238,71 @@ DoesNotExist: Question matching query does not exist.
 >>> q.was_published_recently() # 是否最近发布
 True
 
-# Give the Question a couple of Choices. The create call constructs a new
-# Choice object, does the INSERT statement, adds the choice to the set
-# of available choices and returns the new Choice object. Django creates
-# a set (defined as "choice_set") to hold the "other side" of a ForeignKey
-# relation (e.g. a question's choice) which can be accessed via the API.
 >>> q = Question.objects.get(pk=1)
 
-# Display any choices from the related object set -- none so far.
->>> q.choice_set.all()
+>>> q.choice_set.all() # 查询当前问题(q)的所有选择(choice)，返回的是一个集合
 <QuerySet []>
 
-# Create three choices.
+# 创建 3 个选择(choice)
 >>> q.choice_set.create(choice_text="Not much", votes=0)
 <Choice: Not much>
+
 >>> q.choice_set.create(choice_text="The sky", votes=0)
 <Choice: The sky>
+
 >>> c = q.choice_set.create(choice_text="Just hacking again", votes=0)
 
-# Choice objects have API access to their related Question objects.
+# choice 同样可以查询对应的问题(question)
 >>> c.question
 <Question: What's up?>
 
-# And vice versa: Question objects get access to Choice objects.
 >>> q.choice_set.all()
 <QuerySet [<Choice: Not much>, <Choice: The sky>, <Choice: Just hacking again>]>
->>> q.choice_set.count()
+>>> q.choice_set.count() # 查询当前问题(q)所有选择(choice)的数量()
 3
 
-# The API automatically follows relationships as far as you need.
-# Use double underscores to separate relationships.
-# This works as many levels deep as you want; there's no limit.
-# Find all Choices for any question whose pub_date is in this year
-# (reusing the 'current_year' variable we created above).
->>> Choice.objects.filter(question__pub_date__year=current_year)
+>>> Choice.objects.filter(question__pub_date__year=current_year) # 查询今年发布的选择(choice)
 <QuerySet [<Choice: Not much>, <Choice: The sky>, <Choice: Just hacking again>]>
 
-# Let's delete one of the choices. Use delete() for that.
 >>> c = q.choice_set.filter(choice_text__startswith="Just hacking")
->>> c.delete(
+>>> c.delete() # 删除筛选的数据
 ```
 
+# Django APIView 与 Serialization
+
+
+
+
+
+
+
+# 单元测试
+
+应用下有一个 `tests.py` 文件，负责测试各个单元程序运行是否正常，运行测试前自动生成数据，测试完成后自动删除数据，不影响数据库内容。
+
+输入以下命令进行测试
+
+```shell
+python manage.py test 你的应用名
+```
+
+
+
+![](C:\Users\13630\AppData\Roaming\Typora\typora-user-images\image-20240831161741433.png)
+
+为了方便进行多个测试，保证代码简洁，可以选择删除 `tests.py` 在同一目录下创建 tests 包，在 tests 文件夹下新建一个空的 `init.py` 文件构成包，并逐一添加测试程序
+
+> **注意** tests 包中的各个模块必须以 test_ 开头，否则 django 无法发现这些测试文件的存在，从而不会运行里面的测试用例。
+
+django 应用的单元测试包括：
+
+- 测试 model，model 的方法是否返回了预期的数据，对数据库的操作是否正确。
+- 测试序列化器
+- 测试视图，针对特定类型的请求，是否返回了预期的响应
+- 其它的一些辅助方法或者类等
+
+## model 测试
+
+在 tests 包下创建  `test_model.py` 文件
+
+以创建 
