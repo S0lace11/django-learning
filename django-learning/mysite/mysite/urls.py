@@ -16,14 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from polls.views import *
 
 urlpatterns = [
     path("polls/", include("polls.urls")),
     path('admin/', admin.site.urls),
-    # path('filterquestions/', FilterQuestions),
-    path('filterquestionsapi/',FilterQuestionsAPI.as_view()),
-    path('getquestions/',GetQuestions.as_view())
-    # path('insertquestion/', InsertQuestion),
-    # path('filterquestion/',FilterQuestion),
 ]

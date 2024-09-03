@@ -1,14 +1,43 @@
-from django.http import HttpResponse,Http404
+from django.http import HttpResponseRedirect,HttpResponse
 from django.template import loader
 from django.shortcuts import get_object_or_404,render
-from .models import Question
+from django.db.models import F
+from django.views import generic
+from django.urls import reverse
 
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view
+
 from .serializers import *
 
+from .models import Question, Choice
+
+
 # Create your views here.
+
+
+
+class IndexView(generic.ListView):
+    template_name = 'polls/index.html'
+    context_object_name = 'latest_question_list'
+
+    def get_queryset(self):
+        # return Question.objects.order_by('-pub_date')[:5] # 返回最新的前5个Question实例，-pub_date 降序排列
+        # 筛选发布日期小于或等于现在时间的Question实例 lte=less than or equal to
+        return Question.objects.filter(pub_date__lte=timezone.now()).order_by("-pub_date")[:5]
+
+class DetailView(generic.DetailView):
+    model = Question
+    template_name = 'polls/detail.html'
+    def get_queryset(self):
+        return Question.objects.filter(pub_date__lte=timezone.now())
+
+
+class ResultsView(generic.DetailView):
+    model = Question
+    template_name = 'polls/results.html'
+
 def index(request):
     latest_question_list = Question.objects.order_by("-pub_date")[:5]
     context = {
@@ -30,28 +59,7 @@ def vote(request, question_id):
     return HttpResponse("You're voting on question %s." % question_id)
 
 
-# @api_view(["GET","POST"])
-# def InsertQuestion(request):
-#     q_text = request.data.get('问题')
-
-#     # 获取分类对象或创建新的分类对象
-#     question, created = Question.objects.get_or_create(question_text=q_text)
-
-#     # 判断是否已存在分类
-#     if not created:
-#         return Response({"status":"已存在", "question":q_text},status=200)
-#     else :
-#         return Response({"message":f"Successfully inserted question'{q_text}'."})
-    
-# @api_view(["GET","POST"])
-# def FilterQuestion(request):
-#     data = request.data.get('问题')
-#     questions = Question.objects.filter(name=data)
-#     if questions.exists():
-#         return Response({"status":"已存在", "question":data},status=200)
-#     else:
-#         return Response({"status":"不存在", "question":data},status=404)
-
+# API 测试
 class GetQuestions(APIView):
     def get(self,request):
         questions = Question.objects.all()
@@ -62,7 +70,8 @@ class GetQuestions(APIView):
     def post(self,request):
         # 从请求数据中提取字段
         request_data = {
-            "question": request.data.get("q_text")
+            "question_text": request.data.get("question_text"),
+            "pub_date":timezone.now()
         }
 
         new_question = Question.objects.create(**request_data)

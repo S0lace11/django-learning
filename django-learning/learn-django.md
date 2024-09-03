@@ -25,6 +25,19 @@ django-admin startproject mysite #最后一个参数填写你自己的项目名�
 
 **重要**：`settings.py ` 包含项目的配置文件
 
+```python
+# urls.py
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path("polls/", include("polls.urls")), # 将应用内的urls封装在include中，方便管理
+    path('admin/', admin.site.urls), # 管理员路径
+]
+```
+
+
+
 ## 创建应用
 
 ```shell
@@ -86,6 +99,10 @@ from django.db import models
 class Question(models.Model):
     question_text = models.CharField(max_length=200)
     pub_date = models.DateTimeField("date published")
+    
+    # 这段代码在后续的测试案例中会报错，需要修改
+    def was_published_recently(self):
+        return self.pub_date >= timezone.now() - datetime.timedelta(days=1) # 判断是否发布在 24 小时之内
     
     def __str__(self):
         return self.question_text
@@ -270,11 +287,95 @@ True
 
 # Django APIView 与 Serialization
 
+## APIView
 
+> APIView 是 Django REST Framework 提供的一个视图类。它和 Django 中的 view 类有些相似，但是又有一些不同之处。APIview 可以处理基于 HTTP 协议的请求，并返回基于内容协商的响应，它旨在提供一个易于使用且灵活的方式来构建 API 视图。
 
+```python
+# polls/views.py
+from django.shortcuts import render
 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from .models import *
 
+class GetQuestions(APIView):
+    def get(self,request):
+        questions = Question.objects.all() # 获取所有的Question实例
+        serializer = QuestionSerializer(instance=questions, many=True) # 对获取的所有的questions进行实例化
+        print(serializer.data)
+        return Response(serializer.data) # 返回所有序列化后的实例
+    
+    def post(self,request):
+        # 从请求数据中提取字段
+        request_data = {
+            "question_text": request.data.get("question_text")
+            "pub_date":timezone.now()
+        }
+
+        new_question = Question.objects.create(**request_data) # 引用request_data中的数据创建一个新的实例
+
+        serializer = QuestionSerializer(instance=new_question) # 对新的实例进行实例化
+        return Response(serializer.data)
+    
+class FilterQuestionsAPI(APIView):
+
+    def get(self, request, format=None):
+        print(request.method)
+        return Response('ok')
+
+    def post(self, request, format=None):
+        print(request.method)
+        return Response('ok')
+
+    def put(self, request, format=None):
+        print(request.method)
+        return Response('ok')
+```
+
+还需要在 `urls.py` 文件中注册这些方法，使之可以被 GET/POST
+
+```##python
+# polls/urls.py
+from django.urls import path
+
+from .views import GetQuestions,FilterQuestionsAPI
+
+from .models import Question
+
+urlpatterns = [
+	...
+    path("getquestions/", GetQuestions.as_view()),
+    path("filterquestionsapi/", FilterQuestionsAPI.as_view())
+]
+```
+
+## 序列化 Serializer
+
+> **序列化**是将复杂的Python数据结构（如Django模型实例或者查询集）转换成易于存储或传输的格式，如JSON、XML等。这个过程对于构建API至关重要，因为Web应用通常需要以JSON格式交换数据。序列化器定义了数据的结构和转化规则，确保输出的数据格式正确且安全。
+
+```python
+# polls/serializers.py
+from rest_framework.serializers import *
+from .models import *
+
+class QuestionSerializer(ModelSerializer):
+    class Meta:
+        model = Question
+        fields = ['question_text', 'pub_date']
+```
+
+## Postman
+
+Postman 是一款流行的
+
+GET
+
+![](C:\Users\13630\AppData\Roaming\Typora\typora-user-images\image-20240902203210059.png)
+
+POST
 
 # 单元测试
 
@@ -305,4 +406,222 @@ django 应用的单元测试包括：
 
 在 tests 包下创建  `test_model.py` 文件
 
-以创建 
+官方给出的案例中，创建一个 30 天后的问题实例，在判断是否最近发布时为 True，显然错误
+
+![](C:\Users\13630\AppData\Roaming\Typora\typora-user-images\image-20240902160605005.png)
+
+创建测试类
+
+```python
+# polls/tests/test_model.py
+import datetime
+
+from django.test import TestCase # 导入测试类
+from django.utils import timezone # 导入时区类
+
+from ..models import Question # 导入Question类
+
+class QuestionModelTests(TestCase):
+    def test_was_published_recently_with_future_question(self):
+        """
+        was_published_recently() returns False for questions whose pub_date
+        is in the future.
+        """
+        time = timezone.now() + datetime.timedelta(days=30)
+        future_question = Question(pub_date=time)
+        self.assertIs(future_question.was_published_recently(), False) # 检查该方法的返回值，应该是False
+```
+
+**测试**
+
+命令行中输入下面的指令
+```shell
+python manage.py test polls
+```
+
+![](C:\Users\13630\AppData\Roaming\Typora\typora-user-images\image-20240902162849418.png)
+
+发现报错了，说明我们的 `was_publised_recentlly` 方法设计有错误
+
+我们重新设计该方法，如果 `pub_date` 在昨天和今天之间，返回 True
+
+```python
+# polls/models.py
+...
+class Question(models.Model):
+...
+    def was_published_recently(self):
+        now = timezone.now()
+        return now - datetime.timedelta(days=1) <= self.pub_date <= now
+...
+```
+
+重新进行测试，这样就是运行成功
+
+![](C:\Users\13630\AppData\Roaming\Typora\typora-user-images\image-20240902163957409.png)
+
+## 测试序列化器
+
+在 tests 包下创建  `test_serializer.py` 文件
+
+`QuestionSerializerTest`  类用于测试 QuestionSerializer 序列化器
+
+`setUpTestData` 创建测试数据，方便后续序列化测试
+
+`test_question_serialization` 验证能否序列化
+
+这里的案例举得不是特别恰当，如果最后结果匹配则测试成功
+
+```python
+# polls/tests/test_serialziers.py
+from django.test import TestCase
+from ..serializers import QuestionSerializer
+from ..models import Question
+
+class QuestionSerializerTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        kwargs = {
+            'question_text': 'test',
+            'pub_date': '2024-09-02 8:00:00'
+        }
+        Question.objects.create(**kwargs)
+
+    def test_question_serialization(self):
+        question = Question.objects.get(pub_date='2024-09-02 8:00:00')
+        serializer = QuestionSerializer(question)
+        data = serializer.data
+        self.assertEqual(data['question_text'], 'test')
+
+```
+
+![](C:\Users\13630\AppData\Roaming\Typora\typora-user-images\image-20240902190301411.png)
+
+
+
+## 测试视图
+
+在 tests 包下创建  `test_views.py` 文件
+
+该测试文件主要用来测试视图工作，测试视图通过模拟HTTP请求并检查视图的响应来确保视图逻辑的正确性。这有助于开发者在修改或添加新功能时，确保现有功能不受影响，提高应用的稳定性和可靠性。
+
+**Client 工具**
+
+Client 用来模拟用户和视图层代码的交互
+
+```python
+from django.test.utils import setup_test_environment 
+setup_test_environment() # 模板渲染器，下面的内容会针对现有的数据库运行
+from django.test import Client
+# 创建一个供用户使用的 client 实例
+client = Client()
+```
+
+
+
+### 测试新视图
+
+创建了一个 `QuestionIndexViewTests` 测试类，分别创建不同的组合来模拟视图可能出现的情况
+
+```python
+# polls/tests/test_views.py
+class QuestionIndexViewTests(TestCase):
+    def test_no_questions(self):
+        response = self.client.get(reverse("polls:index"))
+        # self.client 向应用的 'index' 视图发送一个 GET 请求，reverse("polls:index") 根据 URL 的命名动态生成实际的 URL
+        self.assertEqual(response.status_code, 200)
+        # 请求成功且服务器返回了预期的内容
+        self.assertContains(response, "No polls are available.")
+        # 如果没有投票可用，返回该消息
+        self.assertQuerySetEqual(response.context["latest_question_list"], [])
+        # 没有投票存在的情况下，试图获取的最新问题列表为空
+
+    def test_past_question(self):
+        """
+        获取最新问题列表应为发布在过去的 Question 实例
+        """
+        question = create_question(question_text="Past question.", days=-30)
+        response = self.client.get(reverse("polls:index"))
+        self.assertQuerySetEqual(
+            response.context["latest_question_list"],
+            [question], 
+        )
+
+    def test_future_question(self):
+        """
+        获取最新问题列表应该为空，创建的 Question 实例在未来
+        """
+        create_question(question_text="Future question.", days=30)
+        response = self.client.get(reverse("polls:index"))
+        self.assertContains(response, "No polls are available.")
+        self.assertQuerySetEqual(response.context["latest_question_list"], [])
+
+    def test_future_question_and_past_question(self):
+        """
+        获取最新问题列表应该为发布在过去的 Question 实例，未来的 Question 实例不会出现
+        """
+        question = create_question(question_text="Past question.", days=-30)
+        create_question(question_text="Future question.", days=30)
+        response = self.client.get(reverse("polls:index"))
+        self.assertQuerySetEqual(
+            response.context["latest_question_list"],
+            [question],
+        )
+
+    def test_two_past_questions(self):
+        """
+        获取最新问题列表为发布在过去的 Question 实例，如果有多个，则都会显示
+        """
+        question1 = create_question(question_text="Past question 1.", days=-30)
+        question2 = create_question(question_text="Past question 2.", days=-5)
+        response = self.client.get(reverse("polls:index"))
+        self.assertQuerySetEqual(
+            response.context["latest_question_list"],
+            [question2, question1],
+        )
+```
+
+### 测试 DetailView
+
+用户只能在 URL 中访问过去的实例，我们需要在 DetailView 增加约束
+
+```python
+# polls/views.py
+class DetailView(generic.DetailView):
+    ...
+
+    def get_queryset(self):
+        """
+        排除不是最近发布的问题
+        """
+        return Question.objects.filter(pub_date__lte=timezone.now())
+```
+
+
+
+测试发布在未来的 Question 实例不会被访问到，用户只能访问过去的 Question 实例
+
+```python
+# polls/tests/test_views.py
+class QuestionDetailViewTests(TestCase):
+    def test_future_question(self):
+        """
+        发生在将来的问题不会出现在列表中，返回 404
+        """
+        future_question = create_question(question_text='future_question', days=5)
+        url = reverse('polls:detail', args=(future_question.id,))
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_past_question(self):
+        """
+        发生在过去的问题会显示文本中
+        """
+        past_question = create_question(question_text='Past Question.', days=-5)
+        url = reverse('polls:detail',args=(past_question.id,))
+        response = self.client.get(url)
+        self.assertContains(response, past_question.question_text)
+```
+
+
+
